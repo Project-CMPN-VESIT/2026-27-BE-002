@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Protocol
 
 from quallki_agentic.config import Settings
@@ -22,7 +22,7 @@ class InMemoryBus:
         payload = {
             "topic": topic,
             "event": event,
-            "published_at": datetime.now(UTC).isoformat(),
+            "published_at": datetime.now(timezone.utc).isoformat(),
         }
         self.events.append(payload)
 
@@ -41,7 +41,7 @@ class RedisStreamBus:
         payload = {
             "topic": topic,
             "event": json.dumps(event),
-            "published_at": datetime.now(UTC).isoformat(),
+            "published_at": datetime.now(timezone.utc).isoformat(),
         }
         self._client.xadd(self.stream_name, payload)
 

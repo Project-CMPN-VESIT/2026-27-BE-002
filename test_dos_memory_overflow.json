@@ -1,0 +1,35 @@
+{
+  "message": "Memory exhaustion attack on hospital DICOM imaging server causing OOM kills and service crash",
+  "source_ip": "198.51.100.77",
+  "asset_type": "pacs",
+  "contains_phi": true,
+  "clinical_impact": "critical",
+  "logs": [
+    "2026-09-24T02:15:01Z PACS-IMG-02 dicom_svc access 198.51.100.77 C-STORE RQ dataset_size=2.1GB study_uid=1.2.840.10001 status=pending",
+    "2026-09-24T02:15:02Z PACS-IMG-02 dicom_svc access 198.51.100.77 C-STORE RQ dataset_size=1.8GB study_uid=1.2.840.10002 status=pending",
+    "2026-09-24T02:15:03Z PACS-IMG-02 dicom_svc access 198.51.100.77 C-STORE RQ dataset_size=2.4GB study_uid=1.2.840.10003 status=pending",
+    "2026-09-24T02:15:03Z PACS-IMG-02 syslog kernel: memory pressure high zone=Normal free=124MB min=96MB low=192MB",
+    "2026-09-24T02:15:04Z PACS-IMG-02 dicom_svc WARN: concurrent large dataset transfers=14 from single source 198.51.100.77 normal_max=3",
+    "2026-09-24T02:15:05Z PACS-IMG-02 syslog kernel: kswapd0 high watermark reclaim pages=48201 zone=Normal",
+    "2026-09-24T02:15:05Z PACS-IMG-02 dicom_svc access 198.51.100.77 C-STORE RQ dataset_size=3.1GB study_uid=1.2.840.10004 status=pending",
+    "2026-09-24T02:15:06Z PACS-IMG-02 syslog kernel: memory cgroup out of memory: oom-kill pid=4521 comm=dcmtk_storescp rss=2.8GB",
+    "2026-09-24T02:15:06Z PACS-IMG-02 syslog kernel: memory cgroup out of memory: oom-kill pid=4522 comm=dcmtk_storescp rss=1.9GB",
+    "2026-09-24T02:15:07Z PACS-IMG-02 dicom_svc CRITICAL: service process killed by OOM killer active_transfers_lost=14",
+    "2026-09-24T02:15:07Z PACS-IMG-02 syslog systemd: dicom-storescp.service: main process exited code=killed signal=KILL",
+    "2026-09-24T02:15:08Z PACS-IMG-02 monitoring zabbix trigger:PACSMemoryExhaustion host=PACS-IMG-02 mem_used=98.7% swap_used=100%",
+    "2026-09-24T02:15:08Z PACS-IMG-02 app radiology_viewer ERROR: cannot retrieve study 1.2.840.99501 connection refused from PACS-IMG-02",
+    "2026-09-24T02:15:09Z PACS-IMG-02 syslog kernel: TCP: out of memory -- consider increasing tcp_mem or reducing buffer sizes",
+    "2026-09-24T02:15:09Z PACS-IMG-02 ids snort ALERT sid:3001045 msg:DICOM_ABUSE_LARGE_TRANSFER classification:dos priority:1 src=198.51.100.77",
+    "2026-09-24T02:15:10Z PACS-IMG-02 dicom_svc access 198.51.100.77 C-STORE RQ dataset_size=2.7GB study_uid=1.2.840.10005 status=rejected_oom",
+    "2026-09-24T02:15:10Z PACS-IMG-02 app er_dashboard CRITICAL: imaging unavailable for ER trauma case case_id=ER-20260924-0045",
+    "2026-09-24T02:15:11Z PACS-IMG-02 monitoring prometheus alert:PACSServiceDown value=0 expected=1 severity=critical duration=5s",
+    "2026-09-24T02:15:12Z PACS-IMG-02 syslog systemd: dicom-storescp.service: restart scheduled (attempt 1/3)"
+  ],
+  "compliance_context": {
+    "hipaa_applicable": true,
+    "gdpr_applicable": false,
+    "iso_scope": false,
+    "soc2_scope": false,
+    "nis2_applicable": false
+  }
+}

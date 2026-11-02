@@ -1,0 +1,5 @@
+[
+  {"timestamp":"2026-09-24T03:22:10Z","source":"PORTAL-WEB-01","severity":"ERROR","message":"waf ALERT: SQL injection attempt detected POST /api/v2/patient/search param=name value=\"' OR 1=1; DROP TABLE patients;--\" src=198.51.100.22"},
+  {"timestamp":"2026-09-24T03:22:11Z","source":"EHR-DB-01","severity":"CRITICAL","message":"mysql ERROR 1064: unexpected query pattern SELECT * FROM patients WHERE name='' OR 1=1 connection_id=4472 user=app_readonly"},
+  {"timestamp":"2026-09-24T03:22:12Z","source":"PORTAL-WEB-01","severity":"ALERT","message":"ids suricata ALERT sid:2024055 msg:SQL_INJECTION classification:web-attack src=198.51.100.22 dst=10.10.1.5"}
+]

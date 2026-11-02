@@ -11,7 +11,7 @@ from quallki_agentic.healthcare.demo_runner import run_alert_payload, run_health
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Quallki agentic SOC triage runner")
+    parser = argparse.ArgumentParser(description="QUAL-KI Agentic SOC runner")
     parser.add_argument(
         "--scenario",
         choices=sorted(HOSPITAL_DEMO_CASES.keys()),
@@ -55,71 +55,95 @@ def main() -> None:
 
 def _print_run(run_data: dict[str, object]) -> None:
     scenario = run_data["scenario"]
-    label = run_data["label"]
-    confidence = run_data["confidence"]
     result = run_data["result"]
 
-    print("\n=== TRIAGE RESULT ===")
-    print(f"Scenario: {run_data['scenario_key']} - {scenario['title']}")
-    print(f"Label: {label}")
-    print(f"QML backend: {run_data.get('qml_backend', 'unknown')}")
+    print("\n" + "=" * 60)
+    print(f"  QUAL-KI Agentic SOC — Incident Report")
+    print("=" * 60)
+    print(f"Scenario: {run_data['scenario_key']} — {scenario['title']}")
+    print(f"Incident ID: {run_data.get('incident_id', 'N/A')}")
+
+    # ── Pipeline Execution Log ──────────────────────────────────────────
+    progress_events = run_data.get("progress_events", [])
+    if progress_events:
+        print("\n--- Pipeline Execution Log ---")
+        STATUS_ICON = {"PENDING": "○", "RUNNING": "⟳", "COMPLETED": "✓", "ERROR": "✗"}
+        for event in progress_events:
+            icon = STATUS_ICON.get(event.get("status", ""), "·")
+            agent = event.get("agent", "")
+            msg = event.get("message", "")
+            dur = event.get("duration_ms")
+            dur_str = f" ({dur:.0f}ms)" if dur else ""
+            print(f"  {icon} [{agent}] {msg}{dur_str}")
+
+    # ── Workflow trace ──────────────────────────────────────────────────
     trace = run_data.get("workflow_trace", [])
     if isinstance(trace, list):
         nodes = [str(item.get("node")) for item in trace if isinstance(item, dict)]
-        print(f"LangGraph nodes executed: {', '.join(nodes)}")
-    print(f"Confidence: {confidence:.2f}")
+        print(f"\nLangGraph nodes: {' → '.join(nodes)}")
 
-    print("\nInput Logs:")
-    for log in run_data.get("logs", []):
-        print(f"- {log}")
+    # ── Detection ───────────────────────────────────────────────────────
+    detection = result.get("detection_result", {})
+    if isinstance(detection, dict) and detection:
+        print(f"\n--- Detection ---")
+        print(f"Attack Type: {detection.get('attack_type', 'unknown')}")
+        print(f"Confidence: {float(detection.get('confidence', 0)):.2f}")
+        print(f"Severity: {detection.get('initial_severity', 'unknown')}")
+        print(f"QML Backend: {detection.get('qml', {}).get('backend', 'unknown')}")
+        print(f"IOCs: {', '.join(detection.get('iocs', [])) or 'none'}")
 
-    alert = result.get("alert_object", {})
-    if isinstance(alert, dict):
-        analysis = alert.get("analysis", {})
-        print("\nDetection Analysis:")
-        print(f"Attack vector: {analysis.get('attack_vector', 'unknown')}")
-        print(f"IOCs: {', '.join(analysis.get('iocs', [])) or 'none'}")
-        print(f"Likely CWEs: {', '.join(analysis.get('likely_cwes', [])) or 'none'}")
-        print(f"CWSS-like score: {alert.get('cwss', {}).get('score', 0.0)}")
-
+    # ── Triage ──────────────────────────────────────────────────────────
     triage = result.get("triage_result", {})
-    if isinstance(triage, dict):
-        print(f"Priority: {triage.get('priority', 'P4')}")
-        hypothesis = triage.get("threat_hypothesis")
-        rationale = triage.get("auto_close_rationale")
-        if hypothesis:
-            print(f"Threat Hypothesis: {hypothesis}")
-        if rationale:
-            print(f"Auto-Close Rationale: {rationale}")
+    if isinstance(triage, dict) and triage:
+        confirmed = triage.get("confirmed_attack", {})
+        print(f"\n--- Triage ---")
+        print(f"Confirmed: {confirmed.get('category', 'unknown')}")
+        print(f"Mechanism: {confirmed.get('mechanism', 'unknown')}")
+        path = confirmed.get("attack_path", [])
+        if path:
+            print(f"Attack Path: {' → '.join(path)}")
+        impact = triage.get("impact", {})
+        if impact:
+            print(f"Impact: C={impact.get('confidentiality', 'N')} "
+                  f"I={impact.get('integrity', 'N')} "
+                  f"A={impact.get('availability', 'N')}")
 
-    actions = result.get("recommended_actions", [])
-    if actions:
-        print("\nRecommended Actions:")
-        for index, action in enumerate(actions, start=1):
-            print(f"{index}. {action}")
+    # ── Response ────────────────────────────────────────────────────────
+    response = result.get("response_result", {})
+    if isinstance(response, dict) and response:
+        print(f"\n--- Response ---")
+        print(f"Summary: {response.get('confirmed_attack_summary', '')}")
+        actions = response.get("response_actions", [])
+        if actions:
+            print("Actions:")
+            for i, action in enumerate(actions, 1):
+                print(f"  {i}. {action}")
 
-    response_actions = result.get("response_actions", [])
-    if response_actions:
-        print("\nContainment Actions:")
-        for index, action in enumerate(response_actions, start=1):
-            print(f"{index}. {action}")
+    # ── Compliance ──────────────────────────────────────────────────────
+    compliance = result.get("compliance_result", {})
+    if isinstance(compliance, dict) and compliance:
+        print(f"\n--- Compliance ---")
+        print(f"Data Compromised: {compliance.get('data_compromised', False)}")
+        print(f"Exposure Type: {compliance.get('exposure_type', 'NONE')}")
+        if compliance.get("recommended_compliance_actions"):
+            print("Actions:")
+            for action in compliance["recommended_compliance_actions"]:
+                print(f"  • {action}")
 
-    checklist = result.get("compliance_checklist", [])
-    compliance_assessment = result.get("compliance_assessment", {})
-    if isinstance(checklist, list) and checklist:
-        print("\nCompliance Evidence Mapping:")
-        if isinstance(compliance_assessment, dict):
-            print(f"Assessment metrics: {compliance_assessment}")
-        for item in checklist:
-            if isinstance(item, dict):
-                print(
-                    f"- {item.get('id', '?')} [{item.get('status', 'not_evidenced')}] "
-                    f"{item.get('framework', '')} | {item.get('control', '')} | "
-                    f"Owner: {item.get('owner', 'unassigned')}"
-                )
+    # ── CVSS ────────────────────────────────────────────────────────────
+    cvss = result.get("cvss_result", {})
+    if isinstance(cvss, dict) and cvss:
+        print(f"\n--- CVSS v4.0 ---")
+        cvss_error = cvss.get("error")
+        if cvss_error:
+            print(f"⚠️  Error: {cvss_error}")
+        print(f"Score: {cvss.get('cvss_score', 0)} ({cvss.get('severity_label', 'NONE')})")
+        print(f"Vector: {cvss.get('cvss_vector', 'N/A')}")
 
-    print("\nSOC Summary:")
+    # ── Summary ─────────────────────────────────────────────────────────
+    print(f"\n--- SOC Summary ---")
     print(result.get("final_summary", "No summary generated."))
+    print("=" * 60)
 
 
 if __name__ == "__main__":

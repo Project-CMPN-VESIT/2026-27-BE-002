@@ -1,0 +1,5 @@
+[
+  {"timestamp":"2026-09-24T02:15:01Z","source":"EHR-DB-01","severity":"CRITICAL","message":"app ransomware ALERT: file encryption detected path=/data/patient_records ext=.locked count=847"},
+  {"timestamp":"2026-09-24T02:15:03Z","source":"EHR-DB-01","severity":"ALERT","message":"ids suricata ALERT sid:2024010 msg:RANSOMWARE_C2 classification:malware src=10.10.2.15 dst=185.220.101.34"},
+  {"timestamp":"2026-09-24T02:15:05Z","source":"EHR-DB-01","severity":"CRITICAL","message":"syslog CRITICAL: ransom note dropped at /data/README_DECRYPT.txt bitcoin wallet=bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"}
+]

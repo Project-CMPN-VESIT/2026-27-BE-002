@@ -163,6 +163,13 @@ class QMLVQCClassifier:
     def predict_label(self, payload: dict[str, Any]) -> str:
         if not self.available:
             raise RuntimeError(self.load_error or "QML model is unavailable")
+        label, _ = self.predict_with_confidence(payload)
+        return label
+
+    def predict_with_confidence(self, payload: dict[str, Any]) -> tuple[str, float]:
+        """Return (label, softmax_confidence) from the QML VQC model."""
+        if not self.available:
+            raise RuntimeError(self.load_error or "QML model is unavailable")
         import torch
 
         inputs = torch.from_numpy(
@@ -170,7 +177,10 @@ class QMLVQCClassifier:
         ).reshape(1, 6)
         with torch.inference_mode():
             logits = self._model(inputs)
-        return MODEL_LABELS[int(torch.argmax(logits, dim=1).item())]
+        probs = torch.softmax(logits, dim=1)
+        idx = int(torch.argmax(probs, dim=1).item())
+        confidence = float(probs[0, idx].item())
+        return MODEL_LABELS[idx], confidence
 
 
 def canonical_label(label: str) -> str:

@@ -78,4 +78,42 @@ def build_feature_vector(payload: Mapping[str, Any]) -> tuple[list[float], str]:
         set_value("proto_tcp", 1.0)
         set_value("proto_other", 0.0)
 
+        # ── DOS / DDoS signal extraction from log text ──────────────────
+        import re
+
+        # High request rate → high flow_pkts_s / flow_byts_s
+        rate_matches = re.findall(r"(\d+)\s*req/s", message)
+        if rate_matches:
+            max_rate = max(float(r) for r in rate_matches)
+            set_value("flow_pkts_s", max_rate)
+            set_value("fwd_pkts_s", max_rate)
+            set_value("flow_byts_s", max_rate * 512)  # est. bytes
+
+        # Connection exhaustion → high tot_fwd_pkts
+        conn_matches = re.findall(r"connections?\s+(\d+)/(\d+)", message)
+        if conn_matches:
+            active, total = float(conn_matches[-1][0]), float(conn_matches[-1][1])
+            set_value("tot_fwd_pkts", active)
+            set_value("totlen_fwd_pkts", active * 1024)
+
+        # 503 errors = service unavailable → signature of successful DOS
+        count_503 = message.count("503")
+        if count_503 > 0:
+            set_value("rst_flag_cnt", float(count_503))
+            set_value("fin_flag_cnt", float(count_503))
+
+        # OOM / memory exhaustion signals
+        oom_signals = sum(1 for tok in ("oom", "out of memory", "oom-kill", "memory pressure",
+                                         "memory exhaustion") if tok in message)
+        if oom_signals:
+            set_value("os_high_severity_cnt", float(oom_signals))
+            set_value("os_severity_max", 10.0)
+            set_value("flow_duration", 1.0)  # very short attack window
+
+        # Flood / rate-limit triggers → high pkt volume
+        if any(tok in message for tok in ("flood", "rate_limit", "rate-limit", "all_busy", "ddos")):
+            set_value("flow_pkts_s", max(values[FEATURE_NAMES.index("flow_pkts_s")], 1000.0))
+            set_value("syn_flag_cnt", 1.0)
+            set_value("psh_flag_cnt", 1.0)
+
     return values, "derived_demo" if not features else "provided_features"

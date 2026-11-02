@@ -1,0 +1,5 @@
+[
+  {"timestamp":"2026-09-24T00:01:02Z","source":"PORTAL-WEB-01","severity":"CRITICAL","message":"nginx rate_limit CRITICAL: 1200 req/s from 203.0.113.45 threshold=100 action=throttle"},
+  {"timestamp":"2026-09-24T00:01:04Z","source":"PORTAL-WEB-01","severity":"CRITICAL","message":"backend_pool CRITICAL: active connections 500/500 upstream=portal-api-pool ALL_BUSY"},
+  {"timestamp":"2026-09-24T00:01:05Z","source":"PORTAL-WEB-01","severity":"ALERT","message":"ids suricata ALERT sid:2024001 msg:HTTP_FLOOD classification:dos src=203.0.113.45 dst=10.10.1.5"}
+]

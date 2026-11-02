@@ -1,130 +1,166 @@
+"""Triage Agent — confirms the attack and reconstructs the exact attack path.
+
+Receives two inputs:
+1. DetectionResult (structured detection output)
+2. Original Raw Logs (for evidence-based analysis)
+
+The Triage Agent uses the raw evidence to determine what exactly happened
+and through which technical path the attack occurred.
+"""
 from __future__ import annotations
 
-import os
-import uuid
+from typing import Any
+
 from quallki_agentic.agents.base_agent import BaseAgent
-from quallki_agentic.config import Settings
-from quallki_agentic.telemetry.schemas import TriageVerdict
+from quallki_agentic.progress import Status, get_progress_logger
+from quallki_agentic.result_models import ConfirmedAttack, TriageResult
 
 
 class TriageAgent(BaseAgent):
     name = "triage"
 
-    def run(self, payload: dict[str, object]) -> dict[str, object]:
-        settings = Settings.from_env()
+    def run(self, payload: dict[str, Any]) -> dict[str, Any]:
+        logger = get_progress_logger()
+        incident_id = str(payload.get("incident_id", "INC-000"))
 
-        alert = payload.get("alert_object", {})
-        if not isinstance(alert, dict):
-            alert = {}
+        logger.emit(incident_id, "triage", "triage_analysis", Status.RUNNING,
+                     "Triage Agent: Starting attack confirmation and path analysis")
 
-        label = str(alert.get("qml_label", "unknown")).lower()
-        confidence = float(alert.get("composite_confidence", 0.0))
-        cwss = alert.get("cwss", {})
-        cwss_score = float(cwss.get("score", 0.0)) if isinstance(cwss, dict) else 0.0
-        analysis = alert.get("analysis", {})
-        attack_vector = str(analysis.get("attack_vector", "unknown")) if isinstance(analysis, dict) else "unknown"
-        clinical_impact = str(alert.get("clinical_impact", "medium")).lower()
-        affected_assets = analysis.get("affected", [alert.get("asset_type", "unknown")]) if isinstance(analysis, dict) else ["unknown"]
-        if not isinstance(affected_assets, list):
-            affected_assets = [affected_assets]
+        # ── Read inputs ─────────────────────────────────────────────────
+        detection_result = payload.get("detection_result", {})
+        if not isinstance(detection_result, dict):
+            detection_result = {}
+        raw_logs = payload.get("logs", [])
+        if not isinstance(raw_logs, list):
+            raw_logs = []
 
-        prompt = f"""
-        You are the Tier-2 Triage Agent in QUAL-KĪ SOC.
-        Analyze the following security telemetry and determine the TriageVerdict:
-        - QML Label: {label}
-        - Composite Confidence: {confidence:.2f}
-        - CWSS Score: {cwss_score:.2f}
-        - Attack Vector: {attack_vector}
-        - Clinical Impact: {clinical_impact}
-        - Evidence: {analysis.get('evidence', [])}
-        - Affected Assets: {affected_assets}
-        - Message: {payload.get('message', '')}
-        - Logs: {payload.get('logs', [])}
-        
-        Generate the incident ID (e.g., INC-YYYY-XXX), formulate a threat hypothesis, determine if it's a false positive, and specify exactly which specialist agents to route to.
-        """
+        attack_type = str(detection_result.get("attack_type", "unknown"))
+        confidence = float(detection_result.get("confidence", 0.0))
+        evidence = detection_result.get("evidence", [])
+        iocs = detection_result.get("iocs", [])
+        source = detection_result.get("source", {})
+        target = detection_result.get("target", {})
+        timestamp_range = detection_result.get("timestamp_range", {})
 
-        verdict: TriageVerdict | None = None
-        
-        # Try NVIDIA first
-        llm = None
-        if os.getenv("NVIDIA_API_KEY"):
-            try:
-                from langchain_nvidia_ai_endpoints import ChatNVIDIA
-                llm = ChatNVIDIA(
-                    model="nvidia/nemotron-3-ultra-550b-a55b",
-                    nvidia_api_key=os.environ["NVIDIA_API_KEY"],
-                    temperature=0.0
-                )
-            except Exception as e:
-                print(f"Failed to load NVIDIA LLM in Triage: {e}")
-                llm = None
+        # ── Correlate evidence via LLM ──────────────────────────────────
+        logger.emit(incident_id, "triage", "evidence_correlation", Status.RUNNING,
+                     "Correlating network, application, and system events")
 
-        # Fallback to Gemini
-        if not llm and settings.use_gemini and os.getenv("GEMINI_API_KEY"):
-            try:
-                from langchain_google_genai import ChatGoogleGenerativeAI
-                llm = ChatGoogleGenerativeAI(
-                    model=settings.gemini_model,
-                    google_api_key=os.environ["GEMINI_API_KEY"],
-                    temperature=0.0,
-                )
-            except Exception as e:
-                print(f"Failed to load Gemini LLM in Triage: {e}")
-                llm = None
+        from quallki_agentic.llm_helper import invoke_llm
+        from quallki_agentic.log_filter import summarize_logs_for_llm
 
-        if llm:
-            try:
-                structured_llm = llm.with_structured_output(TriageVerdict)
-                verdict = structured_llm.invoke(prompt)
-            except Exception as e:
-                print(f"Triage LLM extraction error: {e}")
+        filtered_logs = summarize_logs_for_llm(raw_logs, detection_result, max_lines=6)
 
-        if verdict:
-            # Route logic based on verdict action
-            route = "investigate_path"
-            if verdict.action in ["ESCALATE_HIGH", "CONTAIN_CRITICAL"]:
-                route = "response_path"
-            elif verdict.action == "AUTO_CLOSE_FALSE_POSITIVE":
-                route = "auto_close"
-                
-            return {
-                "triage_result": {
-                    "incident_id": verdict.incident_id,
-                    "priority": verdict.assigned_priority,
-                    "confidence": confidence,
-                    "action": verdict.action,
-                    "threat_hypothesis": verdict.threat_hypothesis,
-                    "blast_radius": verdict.blast_radius,
-                    "affected_critical_assets": verdict.affected_critical_assets,
-                    "auto_close_rationale": verdict.auto_close_rationale,
-                    "required_specialists": verdict.required_specialists,
-                    "recommended_containment": verdict.recommended_containment,
-                    "requires_human_signoff": verdict.requires_human_signoff,
-                    "human_executive_brief": verdict.human_executive_brief,
-                    "reasoning_backend": "gemini_structured"
+        prompt = f"""You are the Triage Agent in a Security Operations Center.
+
+The QML detection model identified a potential attack. Your job is to:
+1. CONFIRM the attack type by analyzing the raw logs
+2. Determine the EXACT attack mechanism (not just the category)
+3. Reconstruct the precise ATTACK PATH step by step
+4. Identify all affected assets and the impact
+
+## Detection Result
+- Attack Type: {attack_type}
+- Confidence: {confidence}
+- Source: {source}
+- Target: {target}
+- Timestamps: {timestamp_range}
+- Evidence: {evidence}
+- IOCs: {iocs}
+
+## Suspicious Log Entries
+{filtered_logs}
+
+## Required Output
+Return strict JSON with these keys:
+- category: string (confirmed attack category, e.g. "DOS", "RANSOMWARE", "SQL_INJECTION", "CREDENTIAL_THEFT", "RECON")
+- mechanism: string (specific mechanism, e.g. "REQUEST_SPAMMING", "BUFFER_OVERFLOW", "BRUTE_FORCE")
+- attack_path: list of strings (ordered steps of the attack progression)
+- confidence: float (your confidence in the confirmation, 0-1)
+- timeline: list of objects with "timestamp" and "event" keys
+- affected_assets: list of strings (systems/services affected)
+- evidence: list of strings (evidence supporting your conclusions)
+- root_cause_indicators: list of strings (indicators of root cause)
+- confidentiality_impact: string (NONE/LOW/HIGH)
+- integrity_impact: string (NONE/LOW/HIGH)
+- availability_impact: string (NONE/LOW/HIGH)
+"""
+
+        parsed = invoke_llm(prompt, agent_name="triage")
+
+        if parsed:
+            logger.emit(incident_id, "triage", "evidence_correlation", Status.COMPLETED,
+                         "Evidence correlation completed")
+
+            logger.emit(incident_id, "triage", "attack_path_reconstruction", Status.RUNNING,
+                         "Reconstructing attack path from evidence")
+
+            confirmed = ConfirmedAttack(
+                category=str(parsed.get("category", attack_type)),
+                mechanism=str(parsed.get("mechanism", "UNKNOWN")),
+                attack_path=[str(s) for s in parsed.get("attack_path", [])],
+            )
+
+            timeline_raw = parsed.get("timeline", [])
+            timeline = []
+            if isinstance(timeline_raw, list):
+                for item in timeline_raw:
+                    if isinstance(item, dict):
+                        timeline.append({
+                            "timestamp": str(item.get("timestamp", "")),
+                            "event": str(item.get("event", "")),
+                        })
+
+            affected_assets = [str(a) for a in parsed.get("affected_assets", [])]
+            triage_evidence = [str(e) for e in parsed.get("evidence", [])]
+            root_cause = [str(r) for r in parsed.get("root_cause_indicators", [])]
+
+            triage_result = TriageResult(
+                incident_id=incident_id,
+                confirmed_attack=confirmed,
+                confidence=float(parsed.get("confidence", confidence)),
+                timeline=timeline,
+                affected_assets=affected_assets,
+                evidence=triage_evidence,
+                root_cause_indicators=root_cause,
+                impact={
+                    "confidentiality": str(parsed.get("confidentiality_impact", "NONE")),
+                    "integrity": str(parsed.get("integrity_impact", "NONE")),
+                    "availability": str(parsed.get("availability_impact", "NONE")),
                 },
-                "route": route,
-            }
+            )
 
-        # Fallback deterministic
-        priority = "P1" if cwss_score >= 6 else "P2"
-        route = "response_path" if priority == "P1" else "investigate_path"
-        return {
-            "triage_result": {
-                "incident_id": f"INC-{uuid.uuid4().hex[:6]}",
-                "priority": priority,
-                "confidence": confidence,
-                "action": "CONTAIN_CRITICAL" if priority == "P1" else "INVESTIGATE_LOW",
-                "threat_hypothesis": f"Fallback hypothesis for {attack_vector}",
-                "blast_radius": "Isolated_Host",
-                "affected_critical_assets": [str(a) for a in affected_assets],
-                "auto_close_rationale": None,
-                "required_specialists": ["ThreatIntelAgent", "ResponseAgent"],
-                "recommended_containment": "Isolate affected host",
-                "requires_human_signoff": True,
-                "human_executive_brief": f"Fallback alert for {label} - {cwss_score}",
-                "reasoning_backend": "deterministic_fallback"
-            },
-            "route": route,
-        }
+            logger.emit(incident_id, "triage", "attack_path_reconstruction", Status.COMPLETED,
+                         f"Attack path: {confirmed.category} → {confirmed.mechanism}")
+
+        else:
+            # LLM unavailable — create a basic result from detection data
+            logger.emit(incident_id, "triage", "evidence_correlation", Status.COMPLETED,
+                         "Evidence correlation completed (without LLM enrichment)")
+
+            confirmed = ConfirmedAttack(
+                category=attack_type,
+                mechanism="UNDETERMINED",
+                attack_path=[f"Detected {attack_type} activity"],
+            )
+
+            triage_result = TriageResult(
+                incident_id=incident_id,
+                confirmed_attack=confirmed,
+                confidence=confidence,
+                timeline=[],
+                affected_assets=[str(source.get("entity", "unknown"))],
+                evidence=[str(e) for e in evidence],
+                root_cause_indicators=[],
+                impact={
+                    "confidentiality": "NONE",
+                    "integrity": "NONE",
+                    "availability": "NONE",
+                },
+            )
+
+        logger.emit(incident_id, "triage", "triage_analysis", Status.COMPLETED,
+                     f"Triage completed — {triage_result.confirmed_attack.category} "
+                     f"via {triage_result.confirmed_attack.mechanism}")
+
+        return {"triage_result": triage_result.model_dump()}

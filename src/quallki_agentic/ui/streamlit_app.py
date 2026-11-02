@@ -1,23 +1,35 @@
+"""QUAL-KI Agentic SOC — Streamlit Dashboard with Live Execution Status.
+
+Revised UI matching the new pipeline:
+Preprocessing → QML → Detection → Triage → Response → Compliance + CVSS (background)
+
+Features live execution status panel showing PENDING/RUNNING/COMPLETED/ERROR
+for every pipeline stage, with sub-step details and elapsed time.
+"""
 from __future__ import annotations
 
 import json
+import time
 
 import streamlit as st
 
 from quallki_agentic.healthcare import HOSPITAL_DEMO_CASES
 from quallki_agentic.healthcare.demo_runner import run_alert_payload, run_healthcare_demo_scenario
 
+# ── Page config ─────────────────────────────────────────────────────────
+st.set_page_config(page_title="QUAL-KI Agentic SOC", layout="wide")
 
-st.set_page_config(page_title="QUAL-KI Healthcare SOC Demo", layout="wide")
-
-st.title("QUAL-KI Agentic Healthcare SOC Demo")
+st.title("🛡️ QUAL-KI Agentic SOC")
 st.caption(
-    "Scenario-driven hospital cybersecurity demonstration with agentic triage, containment, and compliance evidence."
+    "Quantum-enhanced agentic cybersecurity pipeline — "
+    "Preprocessing → QML → Detection → Triage → Response → Compliance + CVSS"
 )
 
+# ── Sidebar ─────────────────────────────────────────────────────────────
 input_mode = st.sidebar.radio("Input source", ["Live JSON/JSONL", "Synthetic demo"], index=0)
 scenario_key = None
 uploaded_file = None
+
 if input_mode == "Synthetic demo":
     scenario_key = st.sidebar.selectbox(
         "Select Hospital Scenario",
@@ -27,10 +39,14 @@ if input_mode == "Synthetic demo":
 else:
     uploaded_file = st.sidebar.file_uploader("Upload alert JSON or JSONL", type=["json", "jsonl", "txt"])
 
-if st.sidebar.button("Run Agentic SOC"):
+run_clicked = st.sidebar.button("🚀 Run Agentic SOC", use_container_width=True)
+
+# ── Run Pipeline ────────────────────────────────────────────────────────
+if run_clicked:
     if input_mode == "Synthetic demo" and scenario_key:
-        st.session_state["run_data"] = run_healthcare_demo_scenario(scenario_key)
-        st.session_state["run_mode"] = input_mode
+        with st.spinner("Running pipeline..."):
+            st.session_state["run_data"] = run_healthcare_demo_scenario(scenario_key)
+            st.session_state["run_mode"] = input_mode
     elif uploaded_file is not None:
         raw_text = uploaded_file.getvalue().decode("utf-8").strip()
         try:
@@ -38,11 +54,13 @@ if st.sidebar.button("Run Agentic SOC"):
             record = parsed[0] if isinstance(parsed, list) else parsed
             if not isinstance(record, dict):
                 raise ValueError("The uploaded JSON must contain an object or a list of objects")
-            st.session_state["run_data"] = run_alert_payload(record)
-            st.session_state["run_mode"] = input_mode
+            with st.spinner("Running pipeline..."):
+                st.session_state["run_data"] = run_alert_payload(record)
+                st.session_state["run_mode"] = input_mode
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
             st.error(f"Could not load alert input: {exc}")
 
+# ── Get run data ────────────────────────────────────────────────────────
 run_data = st.session_state.get("run_data") if st.session_state.get("run_mode") == input_mode else None
 if run_data is None:
     if input_mode == "Synthetic demo" and scenario_key:
@@ -51,84 +69,443 @@ if run_data is None:
         st.info("Upload a real JSON/JSONL alert and click Run Agentic SOC.")
         st.stop()
 
+# ── Extract results ─────────────────────────────────────────────────────
 result = run_data["result"]
 scenario = run_data["scenario"]
-alert = result.get("alert_object", {})
-triage = result.get("triage_result", {})
-threat_intel = result.get("threat_intel_result", {})
-response_actions = result.get("response_actions", [])
-assignments = result.get("assignments", [])
-forensics_summary = result.get("forensics_summary", "")
-checklist = result.get("compliance_checklist", [])
-compliance_assessment = result.get("compliance_assessment", {})
+progress_events = run_data.get("progress_events", [])
+detection_result = result.get("detection_result", {})
+triage_result = result.get("triage_result", {})
+response_result = result.get("response_result", {})
+compliance_result = result.get("compliance_result", {})
+cvss_result = result.get("cvss_result", {})
+final_report = result.get("final_report", {})
 
-metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
-metric_col1.metric("Label", str(run_data["label"]))
-metric_col2.metric("Confidence", f"{float(run_data['confidence']):.2f}")
-metric_col3.metric("Priority", str(triage.get("priority", "P4")) if isinstance(triage, dict) else "P4")
-metric_col4.metric("Scenario", run_data["scenario_key"])
-st.caption(f"Inference backend: {run_data.get('qml_backend', 'unknown')}")
+# ── Top metrics ─────────────────────────────────────────────────────────
+metric_cols = st.columns(5)
+metric_cols[0].metric("Attack Type", str(detection_result.get("attack_type", "—")))
+metric_cols[1].metric("Confidence", f"{float(detection_result.get('confidence', 0)):.2f}")
+metric_cols[2].metric("Severity", str(detection_result.get("initial_severity", "—")).upper())
+metric_cols[3].metric("CVSS Score", f"{float(cvss_result.get('cvss_score', 0)):.1f}")
+metric_cols[4].metric("Scenario", run_data["scenario_key"])
+
+qml_result = result.get("qml_result", {})
+st.caption(f"QML backend: {qml_result.get('backend', 'unknown')} | Incident: {result.get('incident_id', 'N/A')}")
+
+
+# =========================================================================
+# TABS
+# =========================================================================
 
 (
+    tab_execution,
     tab_overview,
     tab_detection,
     tab_triage,
-    tab_threat_intel,
     tab_response,
-    tab_forensics,
     tab_compliance,
-    tab_workflow,
-    tab_summary,
-) = st.tabs(
-    [
-        "Overview",
-        "Detection",
-        "Triage",
-        "Threat Intel",
-        "Response",
-        "Forensics",
-        "Compliance",
-        "LangGraph Trace",
-        "SOC Summary",
-    ]
-)
+    tab_cvss,
+    tab_report,
+    tab_trace,
+) = st.tabs([
+    "⟳ Execution Log",
+    "📋 Overview",
+    "🔍 Detection",
+    "🎯 Triage",
+    "🛡️ Response",
+    "📜 Compliance",
+    "📊 CVSS",
+    "📝 Final Report",
+    "🔗 LangGraph Trace",
+])
 
+
+# ── Tab: Live Execution Log ────────────────────────────────────────────
+with tab_execution:
+    st.subheader("Live Pipeline Execution Status")
+    st.caption("Real-time progress of every pipeline stage, LLM call, and background process.")
+
+    STATUS_ICON = {
+        "PENDING": "○",
+        "RUNNING": "⟳",
+        "COMPLETED": "✓",
+        "ERROR": "✗",
+    }
+    STATUS_COLOR = {
+        "PENDING": "#888888",
+        "RUNNING": "#3b82f6",
+        "COMPLETED": "#22c55e",
+        "ERROR": "#ef4444",
+    }
+
+    # Pipeline stages overview
+    pipeline_stages = ["preprocessing", "qml", "detection", "triage", "response", "compliance", "cvss", "finalize"]
+    stage_labels = {
+        "preprocessing": "Preprocessing",
+        "qml": "QML Model",
+        "detection": "Detection Agent",
+        "triage": "Triage Agent",
+        "response": "Response Agent",
+        "compliance": "Compliance Agent",
+        "cvss": "CVSS Agent (Background)",
+        "finalize": "Finalize Report",
+    }
+
+    # Build per-agent status from events
+    agent_status: dict[str, dict] = {}
+    agent_events: dict[str, list] = {s: [] for s in pipeline_stages}
+    for event in progress_events:
+        agent = event.get("agent", "")
+        if agent in agent_events:
+            agent_events[agent].append(event)
+            agent_status[agent] = event
+
+    # Render status panel
+    for stage in pipeline_stages:
+        latest = agent_status.get(stage, {})
+        status = latest.get("status", "PENDING")
+        icon = STATUS_ICON.get(status, "○")
+        color = STATUS_COLOR.get(status, "#888")
+        label = stage_labels.get(stage, stage)
+        message = latest.get("message", "")
+        duration = latest.get("duration_ms")
+
+        duration_text = f" ({duration:.0f}ms)" if duration else ""
+        badge = f'<span style="color:{color};font-weight:bold;font-size:1.1em">{icon}</span>'
+
+        st.markdown(
+            f'{badge} **{label}** [{status}]{duration_text}',
+            unsafe_allow_html=True,
+        )
+
+        # Show sub-steps
+        events = agent_events.get(stage, [])
+        if events and len(events) > 1:
+            sub_lines = []
+            for ev in events:
+                sub_icon = STATUS_ICON.get(ev.get("status", ""), "·")
+                sub_msg = ev.get("message", "")
+                sub_dur = ev.get("duration_ms")
+                dur_str = f" ({sub_dur:.0f}ms)" if sub_dur else ""
+                sub_lines.append(f"&nbsp;&nbsp;&nbsp;&nbsp;{sub_icon} {sub_msg}{dur_str}")
+            st.markdown("<br>".join(sub_lines), unsafe_allow_html=True)
+
+        st.markdown("---")
+
+    # Full event log
+    with st.expander("📜 Full Event Log (JSON)", expanded=False):
+        st.json(progress_events)
+
+
+# ── Tab: Overview ───────────────────────────────────────────────────────
 with tab_overview:
     st.subheader(str(scenario.get("title", run_data["scenario_key"])))
     st.write(str(scenario.get("message", "")))
-    st.write(
-        {
-            "asset_type": scenario.get("asset_type"),
-            "contains_phi": scenario.get("contains_phi"),
-            "clinical_impact": scenario.get("clinical_impact"),
-            "source_ip": scenario.get("source_ip"),
-            "simulation": run_data.get("payload", {}).get("simulation", {}),
-        }
-    )
-    st.subheader("Simulated Attack Logs")
+    st.write({
+        "asset_type": scenario.get("asset_type"),
+        "contains_phi": scenario.get("contains_phi"),
+        "clinical_impact": scenario.get("clinical_impact"),
+        "source_ip": scenario.get("source_ip"),
+        "simulation": run_data.get("payload", {}).get("simulation", {}),
+    })
+    st.subheader("Raw Security Logs")
     st.code("\n".join(run_data.get("logs", [])) or "No logs generated.", language="text")
 
-    analysis = alert.get("analysis", {}) if isinstance(alert, dict) else {}
-    cwss = alert.get("cwss", {}) if isinstance(alert, dict) else {}
-    st.subheader("Detection Evidence")
-    st.json(
-        {
-            "attack_vector": analysis.get("attack_vector", "unknown"),
-            "evidence": analysis.get("evidence", []),
-            "iocs": analysis.get("iocs", []),
-            "likely_cwes": analysis.get("likely_cwes", []),
-            "cwss_score": cwss.get("score", 0.0),
-        }
-    )
 
+# ── Tab: Detection ──────────────────────────────────────────────────────
 with tab_detection:
     st.subheader("Detection Agent Output")
-    st.caption("Local autoencoder + VQC inference, log analysis, IOC extraction, and severity scoring.")
-    st.json(alert if isinstance(alert, dict) else {})
+    st.caption("Interprets QML model output and creates a structured DetectionResult.")
+
+    if isinstance(detection_result, dict) and detection_result:
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Attack Type", detection_result.get("attack_type", "—"))
+        col2.metric("Confidence", f"{float(detection_result.get('confidence', 0)):.2f}")
+        col3.metric("Initial Severity", str(detection_result.get("initial_severity", "—")).upper())
+
+        st.subheader("QML Model Info")
+        st.json(detection_result.get("qml", {}))
+
+        st.subheader("Evidence & IOCs")
+        st.write("**Evidence:**", detection_result.get("evidence", []))
+        st.write("**IOCs:**", detection_result.get("iocs", []))
+        st.write("**Suspicious Events:**", detection_result.get("suspicious_events", []))
+
+        with st.expander("Full DetectionResult JSON"):
+            st.json(detection_result)
+    else:
+        st.info("No detection result available")
 
 
+# ── Tab: Triage ─────────────────────────────────────────────────────────
+with tab_triage:
+    st.subheader("Triage Agent Output")
+    st.caption("Confirms attack type and reconstructs exact attack path using DetectionResult + raw logs.")
 
-with tab_workflow:
+    if isinstance(triage_result, dict) and triage_result:
+        confirmed = triage_result.get("confirmed_attack", {})
+        if isinstance(confirmed, dict):
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Confirmed Category", confirmed.get("category", "—"))
+            col2.metric("Mechanism", confirmed.get("mechanism", "—"))
+            col3.metric("Triage Confidence", f"{float(triage_result.get('confidence', 0)):.2f}")
+
+            st.subheader("Attack Path")
+            path = confirmed.get("attack_path", [])
+            if path:
+                path_text = " → ".join(path)
+                st.info(f"**{path_text}**")
+            else:
+                st.write("No attack path reconstructed")
+
+        st.subheader("Impact Assessment")
+        impact = triage_result.get("impact", {})
+        if isinstance(impact, dict):
+            icols = st.columns(3)
+            icols[0].metric("Confidentiality", impact.get("confidentiality", "NONE"))
+            icols[1].metric("Integrity", impact.get("integrity", "NONE"))
+            icols[2].metric("Availability", impact.get("availability", "NONE"))
+
+        st.subheader("Timeline")
+        timeline = triage_result.get("timeline", [])
+        if isinstance(timeline, list) and timeline:
+            for item in timeline:
+                if isinstance(item, dict):
+                    st.write(f"**{item.get('timestamp', '')}** — {item.get('event', '')}")
+        else:
+            st.write("No timeline reconstructed")
+
+        st.subheader("Affected Assets")
+        st.write(triage_result.get("affected_assets", []))
+
+        with st.expander("Full TriageResult JSON"):
+            st.json(triage_result)
+    else:
+        st.info("No triage result available")
+
+
+# ── Tab: Response ───────────────────────────────────────────────────────
+with tab_response:
+    st.subheader("Response Agent Output")
+    st.caption("Operational response actions tied to the confirmed attack path.")
+
+    if isinstance(response_result, dict) and response_result:
+        st.write(f"**Summary:** {response_result.get('confirmed_attack_summary', '')}")
+
+        st.subheader("Response Actions")
+        for i, action in enumerate(response_result.get("response_actions", []), 1):
+            st.write(f"{i}. {action}")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("Containment Steps")
+            for step in response_result.get("containment_steps", []):
+                st.write(f"• {step}")
+        with col2:
+            st.subheader("Recovery Steps")
+            for step in response_result.get("recovery_steps", []):
+                st.write(f"• {step}")
+
+        st.subheader("Monitoring Recommendations")
+        for rec in response_result.get("monitoring_recommendations", []):
+            st.write(f"• {rec}")
+
+        with st.expander("Full ResponseResult JSON"):
+            st.json(response_result)
+    else:
+        st.info("No response result available")
+
+
+# ── Tab: Compliance ─────────────────────────────────────────────────────
+with tab_compliance:
+    st.subheader("Healthcare Compliance Assessment")
+    st.warning(
+        "This is an evidence assessment, not a compliance certification. "
+        "A qualified control owner or auditor must validate the evidence."
+    )
+
+    if isinstance(compliance_result, dict) and compliance_result:
+        ccols = st.columns(4)
+        ccols[0].metric("Data Compromised", "Yes" if compliance_result.get("data_compromised") else "No")
+        ccols[1].metric("Exposure Type", compliance_result.get("exposure_type", "NONE"))
+        ccols[2].metric("Domain", compliance_result.get("domain", "HEALTHCARE"))
+        ccols[3].metric("Status", compliance_result.get("compliance_assessment", {}).get("status", "—"))
+
+        if compliance_result.get("data_types"):
+            st.subheader("Affected Data Types")
+            for dt in compliance_result["data_types"]:
+                st.write(f"• {dt}")
+
+        if compliance_result.get("recommended_compliance_actions"):
+            st.subheader("Recommended Compliance Actions")
+            for action in compliance_result["recommended_compliance_actions"]:
+                st.write(f"• {action}")
+
+        st.subheader("Compliance Summary")
+        st.write(compliance_result.get("compliance_summary", ""))
+
+        with st.expander("Full ComplianceResult JSON"):
+            st.json(compliance_result)
+    else:
+        st.info("No compliance result available")
+
+    # Legacy compliance checklist
+    checklist = result.get("compliance_checklist", [])
+    compliance_assessment = result.get("compliance_assessment", {})
+    if isinstance(checklist, list) and checklist:
+        st.divider()
+        st.subheader("Control-by-Control Evidence Mapping")
+
+        if isinstance(compliance_assessment, dict):
+            acols = st.columns(4)
+            acols[0].metric("Applicable Controls", compliance_assessment.get("applicable_controls", 0))
+            acols[1].metric("✅ Evidence Complete", compliance_assessment.get("evidence_complete", 0))
+            acols[2].metric("⚠️ Partial", compliance_assessment.get("partial", 0))
+            acols[3].metric("❌ Not Evidenced", compliance_assessment.get("not_evidenced", 0))
+
+        STATUS_ICON_COMP = {
+            "evidence_complete": "✅",
+            "partial": "⚠️",
+            "not_evidenced": "❌",
+            "not_applicable": "⚪",
+        }
+        order = ["evidence_complete", "partial", "not_evidenced", "not_applicable"]
+        grouped: dict[str, list] = {s: [] for s in order}
+        for row in checklist:
+            s = row.get("status", "not_applicable")
+            grouped.setdefault(s, []).append(row)
+
+        for status_key in order:
+            rows = grouped.get(status_key, [])
+            if not rows:
+                continue
+            icon = STATUS_ICON_COMP.get(status_key, "")
+            label = status_key.replace("_", " ").title()
+            st.markdown(f"### {icon} {label}")
+            for row in rows:
+                ctrl_id = row.get("id", "—")
+                framework = row.get("framework", "—")
+                with st.expander(f"{icon}  {ctrl_id}  |  {framework}"):
+                    st.markdown(f"**Control:** {row.get('control', '—')}")
+                    st.markdown(f"**Owner:** `{row.get('owner', '—')}`")
+                    present = row.get("evidence_present", [])
+                    missing = row.get("evidence_missing", [])
+                    if present:
+                        st.markdown(f"**Evidence Present:** `{'`, `'.join(present)}`")
+                    if missing:
+                        st.markdown(f"**Evidence Missing:** `{'`, `'.join(missing)}`")
+
+
+# ── Tab: CVSS ───────────────────────────────────────────────────────────
+with tab_cvss:
+    st.subheader("CVSS v4.0 Assessment")
+    st.caption("Calculated independently by the background CVSS Agent.")
+
+    if isinstance(cvss_result, dict) and cvss_result:
+        cvss_error = cvss_result.get("error")
+        if cvss_error:
+            st.error(f"⚠️ CVSS Agent Error: {cvss_error}")
+
+        ccols = st.columns(3)
+        ccols[0].metric("CVSS Score", f"{float(cvss_result.get('cvss_score', 0)):.1f}")
+        ccols[1].metric("Severity", cvss_result.get("severity_label", "NONE"))
+        ccols[2].metric("Vector", cvss_result.get("cvss_vector", "—"))
+
+        exploit = cvss_result.get("exploitability_metrics", {})
+        if isinstance(exploit, dict) and exploit:
+            st.subheader("Exploitability Metrics")
+            ecols = st.columns(5)
+            ecols[0].metric("Attack Vector", exploit.get("attack_vector", "—"))
+            ecols[1].metric("Attack Complexity", exploit.get("attack_complexity", "—"))
+            ecols[2].metric("Attack Requirements", exploit.get("attack_requirements", "—"))
+            ecols[3].metric("Privileges Required", exploit.get("privileges_required", "—"))
+            ecols[4].metric("User Interaction", exploit.get("user_interaction", "—"))
+
+        impact = cvss_result.get("impact_metrics", {})
+        if isinstance(impact, dict) and impact:
+            st.subheader("Impact Metrics")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**Vulnerable System**")
+                vcols = st.columns(3)
+                vcols[0].metric("Confidentiality", impact.get("confidentiality_vuln", "—"))
+                vcols[1].metric("Integrity", impact.get("integrity_vuln", "—"))
+                vcols[2].metric("Availability", impact.get("availability_vuln", "—"))
+            with col2:
+                st.markdown("**Subsequent System**")
+                scols = st.columns(3)
+                scols[0].metric("Confidentiality", impact.get("confidentiality_sub", "—"))
+                scols[1].metric("Integrity", impact.get("integrity_sub", "—"))
+                scols[2].metric("Availability", impact.get("availability_sub", "—"))
+
+        supplemental = cvss_result.get("supplemental_context", {})
+        if isinstance(supplemental, dict) and supplemental:
+            st.subheader("Supplemental Context")
+            scols = st.columns(2)
+            scols[0].metric("Automatable", supplemental.get("automatable", "—"))
+            scols[1].metric("Recovery", supplemental.get("recovery", "—"))
+
+        evidence = cvss_result.get("supporting_evidence", [])
+        if evidence:
+            st.subheader("Supporting Evidence")
+            for e in evidence:
+                st.write(f"• {e}")
+
+        with st.expander("Full CVSSResult JSON"):
+            st.json(cvss_result)
+    else:
+        st.info("No CVSS result available")
+
+
+# ── Tab: Final Report ───────────────────────────────────────────────────
+with tab_report:
+    st.subheader("Final Incident Report")
+    st.caption("Combined output from Detection + Triage + Response + Compliance + CVSS.")
+
+    summary = result.get("final_summary", "")
+    if summary:
+        st.info(summary)
+
+    if isinstance(final_report, dict) and final_report:
+        st.subheader("Incident Overview")
+        st.write(f"**Incident ID:** {final_report.get('incident_id', 'N/A')}")
+        st.write(f"**Generated At:** {final_report.get('generated_at', 'N/A')}")
+
+        # Summary cards
+        det = final_report.get("detection", {})
+        tri = final_report.get("triage", {})
+        resp = final_report.get("response", {})
+        comp = final_report.get("compliance", {})
+        cvss = final_report.get("cvss", {})
+
+        st.markdown("---")
+        st.markdown("### Detection")
+        st.write(f"**{det.get('attack_type', 'N/A')}** — {float(det.get('confidence', 0)):.0%} QML confidence")
+
+        st.markdown("### Triage")
+        confirmed = tri.get("confirmed_attack", {})
+        if isinstance(confirmed, dict):
+            path = " → ".join(confirmed.get("attack_path", []))
+            st.write(f"**{confirmed.get('mechanism', 'N/A')}** — {path or 'No path'}")
+
+        st.markdown("### Response")
+        resp_actions = resp.get("response_actions", [])
+        st.write(f"{len(resp_actions)} actions: " + ("; ".join(resp_actions[:3]) + ("..." if len(resp_actions) > 3 else "") if resp_actions else "None"))
+
+        st.markdown("### Compliance")
+        st.write(comp.get("compliance_summary", "N/A")[:200] if isinstance(comp, dict) else "N/A")
+
+        st.markdown("### CVSS")
+        st.write(f"Vector: {cvss.get('cvss_vector', 'N/A')}")
+        st.write(f"Score: {cvss.get('cvss_score', 0)} ({cvss.get('severity_label', 'NONE')})")
+
+        with st.expander("Full Final Report JSON"):
+            st.json(final_report)
+    else:
+        st.write(summary or "No final report generated.")
+
+
+# ── Tab: LangGraph Trace ───────────────────────────────────────────────
+with tab_trace:
     st.subheader("LangGraph Execution Trace")
     st.caption("Each entry is the state update returned by a real graph node for this run.")
     trace = run_data.get("workflow_trace", [])
@@ -141,136 +518,3 @@ with tab_workflow:
                 st.json(entry.get("output", {}))
     else:
         st.info("No streamed graph updates available.")
-
-with tab_triage:
-    st.subheader("Triage Analysis & Verdict")
-    if isinstance(triage, dict):
-        st.write(
-            {
-                "incident_id": triage.get("incident_id"),
-                "priority": triage.get("priority"),
-                "action": triage.get("action"),
-                "threat_hypothesis": triage.get("threat_hypothesis"),
-                "blast_radius": triage.get("blast_radius"),
-                "auto_close_rationale": triage.get("auto_close_rationale"),
-                "human_executive_brief": triage.get("human_executive_brief"),
-                "reasoning_backend": triage.get("reasoning_backend", "gemini_structured"),
-            }
-        )
-    else:
-        st.info("No triage details available")
-
-with tab_threat_intel:
-    st.subheader("Threat Intelligence Agent Output")
-    st.json(threat_intel if isinstance(threat_intel, dict) else {})
-
-with tab_response:
-    st.subheader("Response Agent Output")
-    if isinstance(assignments, list) and assignments:
-        st.write({"assignments": assignments})
-    if isinstance(response_actions, list) and response_actions:
-        for index, action in enumerate(response_actions, start=1):
-            st.write(f"{index}. {action}")
-    else:
-        st.info("No containment actions generated")
-
-with tab_forensics:
-    st.subheader("Forensics Agent Output")
-    st.write(forensics_summary or "No forensics summary generated.")
-
-with tab_compliance:
-    st.subheader("Compliance Evidence Mapping")
-    st.warning(
-        "This is a control-to-evidence mapping, not a compliance certification. "
-        "Open each source and have the named control owner validate the required evidence."
-    )
-
-    if isinstance(compliance_assessment, dict):
-        col_a, col_b, col_c, col_d = st.columns(4)
-        col_a.metric("Applicable Controls", compliance_assessment.get("applicable_controls", 0))
-        col_b.metric("✅ Evidence Complete", compliance_assessment.get("evidence_complete", 0))
-        col_c.metric("⚠️ Partial", compliance_assessment.get("partial", 0))
-        col_d.metric("❌ Not Evidenced", compliance_assessment.get("not_evidenced", 0))
-
-    if isinstance(checklist, list) and checklist:
-        STATUS_ICON = {
-            "evidence_complete": "✅",
-            "partial": "⚠️",
-            "not_evidenced": "❌",
-            "not_applicable": "⚪",
-        }
-        STATUS_COLOR = {
-            "evidence_complete": "#1a7a4a",
-            "partial": "#b58900",
-            "not_evidenced": "#cc3300",
-            "not_applicable": "#888888",
-        }
-
-        # Group by status for a clear visual order
-        order = ["evidence_complete", "partial", "not_evidenced", "not_applicable"]
-        grouped: dict[str, list] = {s: [] for s in order}
-        for row in checklist:
-            s = row.get("status", "not_applicable")
-            grouped.setdefault(s, []).append(row)
-
-        for status in order:
-            rows = grouped.get(status, [])
-            if not rows:
-                continue
-            icon = STATUS_ICON.get(status, "")
-            color = STATUS_COLOR.get(status, "#888")
-            label = status.replace("_", " ").title()
-            st.markdown(f"### {icon} {label}")
-            for row in rows:
-                ctrl_id = row.get("id", "—")
-                framework = row.get("framework", "—")
-                control_desc = row.get("control", "—")
-                owner = row.get("owner", "—")
-                source_url = row.get("source_url", "")
-                present = row.get("evidence_present", [])
-                missing = row.get("evidence_missing", [])
-
-                link_text = f"[📄 {ctrl_id} — {framework}]({source_url})" if source_url else f"**{ctrl_id} — {framework}**"
-                badge = f'<span style="background:{color};color:white;padding:2px 8px;border-radius:4px;font-size:0.8em">{icon} {label}</span>'
-
-                with st.expander(f"{icon}  {ctrl_id}  |  {framework}", expanded=(status == "evidence_complete")):
-                    st.markdown(f"{badge}", unsafe_allow_html=True)
-                    st.markdown(f"**Control:** {control_desc}")
-                    st.markdown(f"**Owner:** `{owner}`")
-                    if source_url:
-                        st.markdown(f"**Source Document:** {link_text}")
-                    if present:
-                        st.markdown(f"**Evidence Present:** `{'`, `'.join(present)}`")
-                    if missing:
-                        st.markdown(f"**Evidence Missing:** `{'`, `'.join(missing)}`")
-                    st.caption("A qualified control owner or independent auditor must validate the above evidence.")
-
-        # Raw data table (full detail)
-        st.divider()
-        with st.expander("📋 Raw Compliance Data Table", expanded=False):
-            import pandas as pd
-            table_rows = []
-            for row in checklist:
-                table_rows.append({
-                    "ID": row.get("id", ""),
-                    "Framework": row.get("framework", ""),
-                    "Status": row.get("status", ""),
-                    "Owner": row.get("owner", ""),
-                    "Evidence Present": ", ".join(row.get("evidence_present", [])) or "—",
-                    "Evidence Missing": ", ".join(row.get("evidence_missing", [])) or "—",
-                    "Source URL": row.get("source_url", ""),
-                })
-            df_compliance = pd.DataFrame(table_rows)
-            st.dataframe(
-                df_compliance,
-                column_config={
-                    "Source URL": st.column_config.LinkColumn("Source URL", display_text="📄 Open"),
-                },
-                use_container_width=True,
-            )
-    else:
-        st.info("No compliance checklist available")
-
-with tab_summary:
-    st.subheader("Executive Incident Summary")
-    st.write(str(result.get("final_summary", "No summary generated.")))

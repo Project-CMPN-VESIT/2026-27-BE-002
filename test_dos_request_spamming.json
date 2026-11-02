@@ -1,0 +1,36 @@
+{
+  "message": "Sustained HTTP flood targeting hospital patient portal login endpoint from external IP range",
+  "source_ip": "203.0.113.45",
+  "asset_type": "patient_portal",
+  "contains_phi": true,
+  "clinical_impact": "high",
+  "logs": [
+    "2026-09-24T00:01:01Z PORTAL-WEB-01 nginx access_log 203.0.113.45 POST /api/v2/auth/login 200 0.002s req_id=a001",
+    "2026-09-24T00:01:01Z PORTAL-WEB-01 nginx access_log 203.0.113.45 POST /api/v2/auth/login 200 0.003s req_id=a002",
+    "2026-09-24T00:01:01Z PORTAL-WEB-01 nginx access_log 203.0.113.45 POST /api/v2/auth/login 200 0.002s req_id=a003",
+    "2026-09-24T00:01:02Z PORTAL-WEB-01 nginx access_log 203.0.113.45 POST /api/v2/auth/login 200 0.045s req_id=a004",
+    "2026-09-24T00:01:02Z PORTAL-WEB-01 nginx rate_limit WARN: 450 req/s from 203.0.113.45 threshold=100 action=log_only",
+    "2026-09-24T00:01:02Z PORTAL-WEB-01 nginx access_log 203.0.113.45 POST /api/v2/auth/login 200 0.120s req_id=a005",
+    "2026-09-24T00:01:03Z PORTAL-WEB-01 nginx access_log 203.0.113.45 POST /api/v2/auth/login 200 0.340s req_id=a006",
+    "2026-09-24T00:01:03Z PORTAL-WEB-01 nginx rate_limit CRITICAL: 1200 req/s from 203.0.113.45 threshold=100 action=throttle",
+    "2026-09-24T00:01:03Z PORTAL-WEB-01 app backend_pool WARN: active connections 487/500 upstream=portal-api-pool",
+    "2026-09-24T00:01:04Z PORTAL-WEB-01 nginx access_log 203.0.113.45 POST /api/v2/auth/login 503 timeout req_id=a007",
+    "2026-09-24T00:01:04Z PORTAL-WEB-01 nginx access_log 203.0.113.45 POST /api/v2/auth/login 503 timeout req_id=a008",
+    "2026-09-24T00:01:04Z PORTAL-WEB-01 app backend_pool CRITICAL: active connections 500/500 upstream=portal-api-pool ALL_BUSY",
+    "2026-09-24T00:01:05Z PORTAL-WEB-01 nginx access_log 10.10.5.22 GET /api/v2/patient/records 503 timeout req_id=b001 user=dr.smith",
+    "2026-09-24T00:01:05Z PORTAL-WEB-01 nginx access_log 10.10.5.30 GET /api/v2/appointments 503 timeout req_id=b002 user=nurse.jones",
+    "2026-09-24T00:01:05Z PORTAL-WEB-01 syslog ALERT: legitimate users denied service count=34 window=5s",
+    "2026-09-24T00:01:06Z PORTAL-WEB-01 nginx rate_limit CRITICAL: 2800 req/s from 203.0.113.45 threshold=100 action=block_pending",
+    "2026-09-24T00:01:06Z PORTAL-WEB-01 ids suricata ALERT sid:2024001 msg:HTTP_FLOOD classification:dos priority:1 src=203.0.113.45 dst=10.10.1.5",
+    "2026-09-24T00:01:07Z PORTAL-WEB-01 app health_check FAIL: /api/v2/health response_time=12400ms threshold=500ms",
+    "2026-09-24T00:01:07Z PORTAL-WEB-01 monitoring prometheus alert:PortalResponseTimeHigh value=12.4s threshold=0.5s severity=critical",
+    "2026-09-24T00:01:08Z PORTAL-WEB-01 nginx error_log upstream timed out (110: Connection timed out) while connecting to upstream portal-api-pool"
+  ],
+  "compliance_context": {
+    "hipaa_applicable": true,
+    "gdpr_applicable": false,
+    "iso_scope": false,
+    "soc2_scope": false,
+    "nis2_applicable": false
+  }
+}

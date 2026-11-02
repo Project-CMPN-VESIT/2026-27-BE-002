@@ -1,16 +1,21 @@
+"""Orchestrator graph — revised linear pipeline.
+
+Preprocessing → QML → Detection → Triage → Response → Compliance → Finalize
+
+No conditional routing, no auto-close, no branching.
+CVSS Agent runs independently in a background thread (launched from detection_node).
+"""
 from __future__ import annotations
 
 from langgraph.graph import END, START, StateGraph
 
-from quallki_agentic.orchestrator.edges import route_after_triage
 from quallki_agentic.orchestrator.nodes import (
-    auto_close_node,
     compliance_node,
     detection_node,
     finalize_node,
-    forensics_node,
+    preprocessing_node,
+    qml_inference_node,
     response_node,
-    threat_intel_node,
     triage_node,
 )
 from quallki_agentic.orchestrator.state import OrchestratorState
@@ -19,31 +24,23 @@ from quallki_agentic.orchestrator.state import OrchestratorState
 def build_orchestrator_graph():
     workflow = StateGraph(OrchestratorState)
 
+    # ── Register nodes ──────────────────────────────────────────────────
+    workflow.add_node("preprocessing", preprocessing_node)
+    workflow.add_node("qml_inference", qml_inference_node)
     workflow.add_node("detection", detection_node)
     workflow.add_node("triage", triage_node)
-    workflow.add_node("threat_intel", threat_intel_node)
     workflow.add_node("response", response_node)
-    workflow.add_node("forensics", forensics_node)
-    workflow.add_node("auto_close", auto_close_node)
     workflow.add_node("compliance", compliance_node)
     workflow.add_node("finalize", finalize_node)
 
-    workflow.add_edge(START, "detection")
+    # ── Linear sequential edges ─────────────────────────────────────────
+    workflow.add_edge(START, "preprocessing")
+    workflow.add_edge("preprocessing", "qml_inference")
+    workflow.add_edge("qml_inference", "detection")
     workflow.add_edge("detection", "triage")
-    workflow.add_conditional_edges(
-        "triage",
-        route_after_triage,
-        {
-            "response_path": "threat_intel",
-            "investigate_path": "threat_intel",
-            "auto_close": "auto_close",
-        },
-    )
-    workflow.add_edge("threat_intel", "response")
-    workflow.add_edge("response", "forensics")
-    workflow.add_edge("forensics", "compliance")
+    workflow.add_edge("triage", "response")
+    workflow.add_edge("response", "compliance")
     workflow.add_edge("compliance", "finalize")
-    workflow.add_edge("auto_close", END)
     workflow.add_edge("finalize", END)
 
     return workflow.compile()

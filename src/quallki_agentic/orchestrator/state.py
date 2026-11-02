@@ -1,9 +1,17 @@
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import Any, TypedDict
 
 
 class OrchestratorState(TypedDict, total=False):
+    """Shared state for the QUAL-KI Agentic SOC pipeline.
+
+    Follows the revised flow: Preprocessing → QML → Detection → Triage →
+    Response → Compliance, with CVSS running independently in the background.
+    """
+
+    # ── Inputs ──────────────────────────────────────────────────────────
+    incident_id: str
     message: str
     source_ip: str
     scenario: str
@@ -17,19 +25,23 @@ class OrchestratorState(TypedDict, total=False):
     compliance_evidence: dict
     alert_id: str
     event_time: str
-    qml_label: str
-    iocs: list[str]
 
-    alert_object: dict
-    triage_result: dict
-    threat_intel_result: dict
-    route: str
-    assignments: list[dict]
-    response_actions: list[str]
-    forensics_summary: str
+    # ── Pipeline stage results ──────────────────────────────────────────
+    preprocessed_features: dict       # Output of preprocessing
+    qml_result: dict                  # Output of QML model inference
+    detection_result: dict            # DetectionResult
+    triage_result: dict               # TriageResult
+    response_result: dict             # ResponseResult
+    compliance_result: dict           # ComplianceResult
+    cvss_result: dict                 # CVSSResult (from background thread)
+
+    # ── Legacy / backward-compat keys ───────────────────────────────────
+    iocs: list[str]
     compliance_note: str
     compliance_checklist: list[dict]
     compliance_assessment: dict
+
+    # ── Final output ────────────────────────────────────────────────────
+    final_report: dict
     final_summary: str
-    deception_plan: list[str]
-    vulnerability_report: dict
+    progress_events: list[dict[str, Any]]

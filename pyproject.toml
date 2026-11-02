@@ -7,13 +7,14 @@ name = "quallki-agentic"
 version = "0.1.0"
 description = "LangGraph starter project"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
   "langgraph>=0.2.30",
   "langchain>=0.3.0",
   "langchain-core>=0.3.0",
   "langchain-openai>=0.2.0",
   "langchain-google-genai>=2.1.0",
+  "langchain-nvidia-ai-endpoints>=0.3.0",
   "python-dotenv>=1.0.1",
   "pydantic>=2.8.2",
   "redis>=5.2.0",
