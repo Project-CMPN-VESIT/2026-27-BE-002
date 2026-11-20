@@ -1,4 +1,32 @@
-# QUAL-KI Agentic SOC
+# QUAL-KĪ: Quantum-Resilient Zero Trust Security Framework
+**Autonomous Agentic SOC with Quantum Machine Learning (QML) and Post-Quantum Cryptography**
+
+> **VESIT — Department of Computer Engineering | Capstone Project – II (AY 2026–27)**  
+> **Group ID:** `BE-002` | **GitHub Repository:** `Project-CMPN-VESIT / 2026-27-BE-002`  
+> **Mentors:** Dr. (Mrs.) Nupur Giri (Internal Mentor) | Mr. Nikhil Kant (Affinity Solutions NYC)  
+> **Team Members:** Veda Patki (43), Soham Patil (40), Jai Desar (12), Aadi Singh Chauhan (09)
+
+---
+
+## 🎓 Capstone Project II — Official Deliverables Matrix
+
+All deliverables required under **Project CMPN Capstone Guidelines (Section 2: GitHub Repository Deliverables)** are verified and accessible within this repository:
+
+| # | CMPN Deliverable Item | Format / Access Path | Description & Direct Links |
+| :---: | :--- | :---: | :--- |
+| **1** | **Final Working System / Product** | Source Code & Models | Full interactive Streamlit SOC dashboard (`src/app.py`), 8-agent LangGraph workflow (`src/quallki_agentic/`), and trained PyTorch QML checkpoints (`best_qml_autoencoder_6q.pt`, `best_qml_vqc_6q.pt`). |
+| **2** | **Source Code Repository with Version History** | GitHub Version Control | Full Git commit history tracking architectural evolution: [Commit History Link](https://github.com/Project-CMPN-VESIT/2026-27-BE-002/commits/main). |
+| **3** | **Testing and Validation Report** | Markdown & PDF | Complete verification suite across 10 formal test cases (TC-01 to TC-10), unitarity checks, prompt injection tests, and QBER failover:<br>• [Testing_and_Validation_Report.md](Deliverables/Testing_and_Validation_Report.md)<br>• [2-Research in Quantum-Nupur-Testing-and-Validation-Report.pdf](Deliverables/2-Research%20in%20Quantum-Nupur-Testing-and-Validation-Report.pdf) |
+| **4** | **Performance Analysis and Result Report** | Markdown & PDF | Empirical benchmarks across 149k-row Caldera testbed, parameter-constrained expressibility, per-class F1 dynamics, and 99.3% MTTR containment latency reduction:<br>• [Performance_Analysis_and_Result_Report.md](Deliverables/Performance_Analysis_and_Result_Report.md)<br>• [2-Research in Quantum-Nupur-Performance-Analysis-Report.pdf](Deliverables/2-Research%20in%20Quantum-Nupur-Performance-Analysis-Report.pdf) |
+| **5** | **Deployment Report / User Manual** | Markdown & PDF | Research prototype testbed manual, hardware/software specifications, environment setup, CLI/GUI execution guide, and air-gapped safety guarantees:<br>• [Deployment_Report_and_User_Manual.md](Deliverables/Deployment_Report_and_User_Manual.md)<br>• [2-Research in Quantum-Nupur-Deployment-Report-User-Manual.pdf](Deliverables/2-Research%20in%20Quantum-Nupur-Deployment-Report-User-Manual.pdf) |
+| **6** | **Final Capstone Project Blackbook Report** | PDF & DOCX | Official 103-page comprehensive Capstone Project Blackbook report (both PDF and editable Word formats):<br>• [2-Research in Quantum-Nupur-Blackbook.pdf](Deliverables/2-Research%20in%20Quantum-Nupur-Blackbook.pdf)<br>• [2-Research in Quantum-Nupur-Blackbook.docx](Deliverables/2-Research%20in%20Quantum-Nupur-Blackbook.docx) |
+| **7** | **Presentation Slides** | TXT & Cloud Slides | Slide-by-slide presentation transcript, defense scripts, visual layout breakdowns, and cloud presentation links:<br>• [2-Research in Quantum-Nupur-Presentation.txt](Deliverables/2-Research%20in%20Quantum-Nupur-Presentation.txt)<br>• [Presentation_Slides.txt](Deliverables/Presentation_Slides.txt) |
+| **8** | **Poster & Demonstration Video** | PDF & MP4 | High-resolution academic research poster and end-to-end system walkthrough video:<br>• Poster: [2-Research in Quantum-Nupur-Poster.pdf](Deliverables/2-Research%20in%20Quantum-Nupur-Poster.pdf)<br>• Demonstration Video: [2-Research in Quantum-Nupur-Video.mp4](Deliverables/2-Research%20in%20Quantum-Nupur-Video.mp4) |
+| **9** | **Project Logbook** | PDF & DOCX | Signed weekly progress logbook documenting project milestones from inception to final defense:<br>• [2-Research in Quantum-Nupur-Logbook.pdf](Deliverables/2-Research%20in%20Quantum-Nupur-Logbook.pdf)<br>• [2-Research in Quantum-Nupur-Logbook.docx](Deliverables/2-Research%20in%20Quantum-Nupur-Logbook.docx) |
+
+---
+
+# QUAL-KI Agentic SOC Overview
 
 QUAL-KI is a healthcare-focused agentic security operations center (SOC)
 prototype. It simulates an attack, turns the simulated telemetry and logs into

@@ -40,6 +40,14 @@ def _load_input(path: Path) -> list[dict[str, object]]:
 
 
 def main() -> None:
+    import sys
+    if sys.platform == "win32":
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
     args = parse_args()
     load_dotenv()
     if bool(args.scenario) == bool(args.input):
